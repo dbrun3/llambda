@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"io"
 	"net/http"
+	"strings"
 	"unicode/utf8"
 )
 
@@ -15,7 +16,7 @@ type Request struct {
 	MultiValueHeaders               map[string][]string `json:"multiValueHeaders"`
 	QueryStringParameters           map[string]string   `json:"queryStringParameters"`
 	MultiValueQueryStringParameters map[string][]string `json:"multiValueQueryStringParameters"`
-	Body                            any                 `json:"body"`
+	Body                            string              `json:"body"`
 	IsBase64Encoded                 bool                `json:"isBase64Encoded"`
 }
 
@@ -24,30 +25,47 @@ func ParseRequest(r *http.Request) (Request, error) {
 	if err != nil {
 		return Request{}, err
 	}
-	headers, multiValueHeaders := flatten(r.Header)
-	query, multiValueQuery := flatten(r.URL.Query())
+
+	headers := lower(r.Header)
+	queryParams := r.URL.Query()
+	if len(queryParams) == 0 {
+		queryParams = nil
+	}
 
 	return Request{
 		Resource:                        r.URL.Path,
 		Path:                            r.URL.Path,
 		HTTPMethod:                      r.Method,
-		Headers:                         headers,
-		MultiValueHeaders:               multiValueHeaders,
-		QueryStringParameters:           query,
-		MultiValueQueryStringParameters: multiValueQuery,
+		Headers:                         flatten(headers),
+		MultiValueHeaders:               headers,
+		QueryStringParameters:           flatten(queryParams),
+		MultiValueQueryStringParameters: queryParams,
 		Body:                            body,
 		IsBase64Encoded:                 isBase64Encoded,
 	}, nil
 }
 
-func flatten(values map[string][]string) (map[string]string, map[string][]string) {
+func lower(values map[string][]string) map[string][]string {
+	lowered := make(map[string][]string, len(values))
+	for k, v := range values {
+		if len(v) > 0 {
+			lowered[strings.ToLower(k)] = v
+		}
+	}
+	return lowered
+}
+
+func flatten(values map[string][]string) map[string]string {
+	if len(values) == 0 {
+		return nil
+	}
 	single := make(map[string]string, len(values))
 	for k, v := range values {
 		if len(v) > 0 {
 			single[k] = v[len(v)-1]
 		}
 	}
-	return single, values
+	return single
 }
 
 func readBody(r *http.Request) (string, bool, error) {
